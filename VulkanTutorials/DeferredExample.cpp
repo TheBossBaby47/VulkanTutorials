@@ -107,8 +107,8 @@ void	DeferredExample::LoadShaders() {
 void	DeferredExample::CreateFrameBuffers(uint32_t width, uint32_t height) {
 	TextureBuilder builder(renderer->GetDevice(), renderer->GetMemoryAllocator());
 
-	builder.UsingPool(renderer->GetCommandPool(CommandBuffer::Graphics))
-			.UsingQueue(renderer->GetQueue(CommandBuffer::Graphics))
+	builder.UsingPool(renderer->GetCommandPool(CommandType::Graphics))
+			.UsingQueue(renderer->GetQueue(CommandType::Graphics))
 			.WithDimension(width, height, 1)
 			.WithMips(false)
 			.WithUsages(vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled)

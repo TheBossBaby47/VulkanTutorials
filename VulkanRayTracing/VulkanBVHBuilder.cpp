@@ -162,7 +162,7 @@ void VulkanBVHBuilder::BuildBLAS(vk::Device device, VmaAllocator allocator, vk::
 
 	vk::DeviceAddress scratchAddr = device.getBufferAddress({ .buffer = scratchBuff.buffer });
 
-	vk::UniqueCommandBuffer buffer = CmdBufferBegin(device, pool, "Making BLAS");
+	vk::UniqueCommandBuffer buffer = CmdBufferCreateBegin(device, pool, "Making BLAS");
 
 	for (auto& i : blasBuildInfo) {		//Make the buffer for each blas entry...
 		vk::AccelerationStructureCreateInfoKHR createInfo;
@@ -296,7 +296,7 @@ void VulkanBVHBuilder::BuildTLAS(vk::Device device, VmaAllocator allocator, vk::
 
 	vk::AccelerationStructureBuildRangeInfoKHR* rangeInfoPtr = &rangeInfo;
 
-	vk::UniqueCommandBuffer cmdBuffer = CmdBufferBegin(device, pool, "Making TLAS");
+	vk::UniqueCommandBuffer cmdBuffer = CmdBufferCreateBegin(device, pool, "Making TLAS");
 	cmdBuffer->buildAccelerationStructuresKHR(1, &geomInfo, &rangeInfoPtr);
 	CmdBufferEndSubmitWait(*cmdBuffer, device, queue);
 }

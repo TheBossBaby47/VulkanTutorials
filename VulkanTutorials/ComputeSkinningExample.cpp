@@ -124,8 +124,8 @@ ComputeSkinningExample::ComputeSkinningExample(Window& window) : VulkanTutorial(
 	WriteBufferDescriptor(device, *computeDescriptor, 4, vk::DescriptorType::eStorageBuffer, jointsBuffer);
 
 	computeSemaphore = device.createSemaphoreUnique({});
-	vk::CommandPool asyncPool	= renderer->GetCommandPool(CommandBuffer::AsyncCompute);
-	vk::CommandPool gfxPool		= renderer->GetCommandPool(CommandBuffer::Graphics);
+	vk::CommandPool asyncPool	= renderer->GetCommandPool(CommandType::AsyncCompute);
+	vk::CommandPool gfxPool		= renderer->GetCommandPool(CommandType::Graphics);
 	asyncCmds  = CmdBufferCreate(device, asyncPool, "Async cmds");
 	renderCmds = CmdBufferCreate(device, gfxPool, "Gfx cmds");
 
@@ -138,8 +138,8 @@ ComputeSkinningExample::~ComputeSkinningExample() {
 void ComputeSkinningExample::RenderFrame(float dt) {
 	VulkanMesh* mesh = (VulkanMesh*)scene.meshes[0].get();
 
-	vk::Queue		asyncQueue	= renderer->GetQueue(CommandBuffer::AsyncCompute);
-	vk::Queue		gfxQueue	= renderer->GetQueue(CommandBuffer::Graphics);
+	vk::Queue		asyncQueue	= renderer->GetQueue(CommandType::AsyncCompute);
+	vk::Queue		gfxQueue	= renderer->GetQueue(CommandType::Graphics);
 
 	frameTime -= dt;
 

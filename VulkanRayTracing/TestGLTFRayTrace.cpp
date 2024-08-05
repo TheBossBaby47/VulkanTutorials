@@ -139,8 +139,8 @@ TestGLTFRayTrace::TestGLTFRayTrace(Window& window) : VulkanTutorial(window) {
 
 
 	rayTexture = TextureBuilder(device, renderer->GetMemoryAllocator())
-		.UsingPool(renderer->GetCommandPool(CommandBuffer::Graphics))
-		.UsingQueue(renderer->GetQueue(CommandBuffer::Graphics))
+		.UsingPool(renderer->GetCommandPool(CommandType::Graphics))
+		.UsingQueue(renderer->GetQueue(CommandType::Graphics))
 		.WithDimension(windowSize.x, windowSize.y, 1)
 		.WithUsages(vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage)
 		.WithPipeFlags(vk::PipelineStageFlagBits2::eColorAttachmentOutput)
@@ -217,8 +217,8 @@ void NCL::Rendering::Vulkan::TestGLTFRayTrace::BuildTlas(const vk::Device& devic
 	}
 
 	tlas = bvhBuilder
-		.WithCommandQueue(renderer->GetQueue(CommandBuffer::AsyncCompute))
-		.WithCommandPool(renderer->GetCommandPool(CommandBuffer::AsyncCompute))
+		.WithCommandQueue(renderer->GetQueue(CommandType::AsyncCompute))
+		.WithCommandPool(renderer->GetCommandPool(CommandType::AsyncCompute))
 		.WithDevice(device)
 		.WithAllocator(renderer->GetMemoryAllocator())
 		.Build(vk::BuildAccelerationStructureFlagBitsKHR::ePreferFastTrace, "GLTF BLAS");

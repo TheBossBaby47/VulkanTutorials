@@ -38,8 +38,8 @@ ShadowMappingExample::ShadowMappingExample(Window& window) : VulkanTutorial(wind
 	.Build("Shadow Use Shader");
 
 	shadowMap = TextureBuilder(device, renderer->GetMemoryAllocator())
-		.UsingPool(renderer->GetCommandPool(CommandBuffer::Graphics))
-		.UsingQueue(renderer->GetQueue(CommandBuffer::Graphics))
+		.UsingPool(renderer->GetCommandPool(CommandType::Graphics))
+		.UsingQueue(renderer->GetQueue(CommandType::Graphics))
 		.WithDimension(SHADOWSIZE, SHADOWSIZE)
 		.WithAspects(vk::ImageAspectFlagBits::eDepth)
 		.WithFormat(vk::Format::eD32Sfloat)

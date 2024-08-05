@@ -106,11 +106,11 @@ DescriptorBufferExample::DescriptorBufferExample(Window& window) : VulkanTutoria
 	//renderer->GetDevice().getDescriptorEXT(&getInfos[1], descriptorProperties.uniformBufferDescriptorSize, ((char*)descriptorBufferMemory) + offsets[1]);
 	//descriptorBuffer.Unmap();
 
-	DescriptorBufferWriter(renderer->GetDevice(), *descriptorLayout, &descriptorBuffer)
-		.SetProperties(&descriptorProperties)
-		.WriteUniformBuffer(0, &uniformData[0])
-		.WriteUniformBuffer(1, &uniformData[1])
-		.Finish();
+	//DescriptorBufferWriter(renderer->GetDevice(), *descriptorLayout, &descriptorBuffer)
+	//	.SetProperties(&descriptorProperties)
+	//	.WriteUniformBuffer(0, &uniformData[0])
+	//	.WriteUniformBuffer(1, &uniformData[1])
+	//	.Finish();
 
 
 	FrameState const& frameState = renderer->GetFrameState();

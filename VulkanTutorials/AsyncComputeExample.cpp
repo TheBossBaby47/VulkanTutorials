@@ -44,8 +44,8 @@ AsyncComputeExample::AsyncComputeExample(Window& window) : VulkanTutorial(window
 	BuildComputePipeline();
 	BuildRasterPipeline();
 
-	vk::CommandPool asyncPool = renderer->GetCommandPool(CommandBuffer::AsyncCompute);
-	asyncBuffer = CmdBufferBegin(device, asyncPool, "Async cmds");
+	vk::CommandPool asyncPool = renderer->GetCommandPool(CommandType::AsyncCompute);
+	asyncBuffer = CmdBufferCreate(device, asyncPool, "Async cmds");
 }
 
 void	AsyncComputeExample::BuildRasterPipeline() {
@@ -75,7 +75,7 @@ void AsyncComputeExample::RenderFrame(float dt) {
 
 	FrameState const& state = renderer->GetFrameState();
 	vk::DescriptorPool pool = renderer->GetDescriptorPool();
-	vk::Queue		asyncQueue = renderer->GetQueue(CommandBuffer::AsyncCompute);
+	vk::Queue		asyncQueue = renderer->GetQueue(CommandType::AsyncCompute);
 
 	vk::CommandBuffer cmdBuffer = state.cmdBuffer;
 

@@ -146,8 +146,8 @@ UniqueVulkanMesh VulkanTutorial::LoadMesh(const string& filename, vk::BufferUsag
 
 UniqueVulkanTexture VulkanTutorial::LoadTexture(const string& filename) {
 	return TextureBuilder(renderer->GetDevice(), renderer->GetMemoryAllocator())
-		.UsingPool(renderer->GetCommandPool(CommandBuffer::Graphics))
-		.UsingQueue(renderer->GetQueue(CommandBuffer::Graphics))
+		.UsingPool(renderer->GetCommandPool(CommandType::Graphics))
+		.UsingQueue(renderer->GetQueue(CommandType::Graphics))
 		.BuildFromFile(filename);
 }
 
@@ -158,8 +158,8 @@ UniqueVulkanTexture VulkanTutorial::LoadCubemap(
 	const std::string& debugName) {
 
 	return TextureBuilder(renderer->GetDevice(), renderer->GetMemoryAllocator())
-		.UsingPool(renderer->GetCommandPool(CommandBuffer::Graphics))
-		.UsingQueue(renderer->GetQueue(CommandBuffer::Graphics))
+		.UsingPool(renderer->GetCommandPool(CommandType::Graphics))
+		.UsingQueue(renderer->GetQueue(CommandType::Graphics))
 		.BuildCubemapFromFile(negativeXFile, positiveXFile,
 			negativeYFile, positiveYFile,
 			negativeZFile, positiveZFile,
