@@ -13,9 +13,24 @@ struct Texture
 
 struct GLTFMaterialLayer 
 {
-    int albedoId;
-    int bumpId;
-    int occlusionId;
-    int emissionId;
-    int metallicId;
+  int albedoId;
+  int bumpId;
+  int occlusionId;
+  int emissionId;
+  int metallicRoughnessId;
+};
+
+struct PointLight
+{
+  vec3 position;
+  vec4 color;
+  float radius;
+  float intensity;
+};
+
+struct PointLightCpp
+{
+  vec3 position;
+  float radius;
+  vec4 color;
 };

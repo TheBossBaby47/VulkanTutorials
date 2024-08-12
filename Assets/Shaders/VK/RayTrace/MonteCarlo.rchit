@@ -15,6 +15,7 @@ License: MIT (see LICENSE file at the top of the source tree)
 
 #include "RayStructs.glslh"
 #include "SceneNode.glslh"
+#include "cookTohorenceBrdf.glslh"
 
 layout(location = 0) rayPayloadInEXT BasicPayload payload;
 
@@ -65,55 +66,8 @@ layout(binding  = 0, set = 5) uniform sampler mySampler; //Default Sampler descr
 
 hitAttributeEXT vec2 hitBarycentrics;
 
-vec3 computeDiffuse(vec3 inDiffuse, vec3 lightDir, vec3 inNormal)
-{
-  // Lambertian
-  float dotNL = max(dot(inNormal, lightDir), 0.0);
-  return inDiffuse * dotNL;
-}
-vec3 computeSpecular(float inGloss, vec3 inSpecularColor, vec3 inViewDir, vec3 inLightDir, vec3 inNormal)
-{
-    vec3 halfAngle = normalize(inLightDir + inViewDir);
-    float specularFactor = dot(halfAngle, inNormal);
-    specularFactor = pow(specularFactor, inGloss);
-    return inSpecularColor * specularFactor;
-}
-vec3 computeSpecular(float inMetal, vec3 viewDir, vec3 lightDir, vec3 inNormal)
-{
-  // Compute specular only if not in shadow
-  const float kPi        = 3.14159265;
-  const float kShininess = max(inMetal, 4.0);
-
-  // Specular
-  const float kEnergyConservation = (2.0 + kShininess) / (2.0 * kPi);
-  vec3        V                   = normalize(-viewDir);
-  vec3        R                   = reflect(-lightDir, inNormal);
-  float       specular            = kEnergyConservation * pow(max(dot(V, R), 0.0), kShininess);
-
-  return vec3(specular);
-}
-
-vec3 getNormalFromTexture(vec3 inTexNormal, vec3 inVNormal, vec3 inVTangent, vec3 inVBiTangent)
-{
-    vec3 outNormal = vec3(0);
-    vec3 bumpNormal = normalize(inTexNormal * 2.0 - 1.0);
-
-    mat3x4 normalMatrix = transpose(gl_WorldToObjectEXT);
-    vec3 wNormal = normalize(normalMatrix * normalize(inVNormal)).xyz;
-
-    vec3 wTangent;
-    vec3 wBiTangent;
-    mat3 TBN;
-    outNormal = wNormal;
-    return outNormal;
-}
-
 void main() 
 {
-    PointLight pointLight;
-
-    // Retrieve the Primitive mesh buffer information
-    // gl_InstanceCustomIndexEXT we are setting it as mesh ID check sample
     GLTFPrimInfo pinfo = primeInfoBuffer.primeInfoList[gl_InstanceCustomIndexEXT + gl_GeometryIndexEXT];
 
     // Getting the 'first index' for this mesh (offset of the mesh + offset of the triangle)
@@ -134,7 +88,6 @@ void main()
         hitBarycentrics.x,
         hitBarycentrics.y);// (w,u,v)
 
-
     const vec2 uv0 = vertexTexCoords.textureCoords[index.x];
     const vec2 uv1 = vertexTexCoords.textureCoords[index.y];
     const vec2 uv2 = vertexTexCoords.textureCoords[index.z];
@@ -149,6 +102,10 @@ void main()
     const vec3 nrm1 = vertexNormals.normals[index.y];
     const vec3 nrm2 = vertexNormals.normals[index.z];
 
+    const vec4 t0 = vertexTangents.tangents[index.x];
+    const vec4 t1 = vertexTangents.tangents[index.x];
+    const vec4 t2 = vertexTangents.tangents[index.x];
+
     //https://computergraphics.stackexchange.com/questions/7738/how-to-assign-calculate-triangle-texture-coordinates
     const vec2 texCoord = (uv0 * barycentrics.x) +
                           (uv1 * barycentrics.y) +
@@ -160,68 +117,44 @@ void main()
     const vec3 vertexNormal = (nrm0 * barycentrics.x) +
                               (nrm1 * barycentrics.y) +
                               (nrm2 * barycentrics.z);
-    
+
+    const vec4 vertexTangent = vec4((t0 * barycentrics.x) +
+                                    (t1 * barycentrics.y) +
+                                    (t2 * barycentrics.z));
+
     const vec3 world_position = vec3( gl_ObjectToWorldEXT * vec4(position, 1.0));
-    const vec3 normal = getNormalFromTexture(
-        texture(sampler2D(textureMap[material.bumpId], mySampler), texCoord).xyz,
+    const vec3 normal = GetNormalFromTexture(
+        texture(sampler2D(textureMap[material.bumpId], mySampler), texCoord).rgb,
         vertexNormal,
-        vec3(0),
-        vec3(0)
+        vertexTangent
     );
-    const vec3 albedoTex = texture(sampler2D(textureMap[material.albedoId], mySampler), texCoord).xyz;
+    const vec4 albedoTex = texture(sampler2D(textureMap[material.albedoId], mySampler), texCoord);
     const vec3 metalicRoughnessTex = texture(sampler2D(textureMap[material.metallicRoughnessId], mySampler), texCoord).xyz;
     const vec4 emmissionTex = texture(sampler2D(textureMap[material.emissionId], mySampler), texCoord);
-    //Light Calculation
-    float lightDistance = 100000;
-    vec4 finalColor = vec4(0.0);
+    const float roughness = metalicRoughnessTex.g;
+    const float metal = metalicRoughnessTex.b;
+
+    vec4 lightOut = vec4(0.0f, 0.0f, 0.0f, 0.0f);
+    PointLight pointLight;
+
     for(int i = 0; i < 10; i++)
     {
         pointLight.position = pointLights.pointLightList[i].position;
         pointLight.color = pointLights.pointLightList[i].color;
         pointLight.radius = pointLights.pointLightList[i].radius;
-        pointLight.intensity = 2.0f;
 
-        //Point Light
-        const vec3 lDir = pointLight.position - world_position;
-        lightDistance = length(lDir);
+        const vec3 L = normalize(pointLight.position - world_position);
+        const vec3 V = normalize(gl_WorldRayDirectionEXT);
+        const float lightDistance = length(pointLight.position - world_position);
+
+        const vec3 brdf = MicrofacetSpecularBrdf(metal, roughness, albedoTex.rgb,  normal, L, V);
+        const float attenuation = PointLightAttenuation(lightDistance, pointLight.radius);
+        const vec3 radiance = pointLight.color.rgb;
         
-        const float lightIntensity = pointLight.intensity / (lightDistance * lightDistance);
-        const vec3 L = normalize(lDir);
-
-        float attenuation = 1.0f;
-
-        float tMin   = 0.001;
-        float tMax   = lightDistance;
-        vec3  origin = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
-        uint  flags  = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT;
-        if(dot(L , normal) > 0)
-        {        
-            traceRayEXT
-            (           
-                tlas,        // acceleration structure
-                flags,       // rayFlags
-                0xFF,        // cullMask
-                0,           // sbtRecordOffset
-                0,           // sbtRecordStride
-                1,           // missIndex
-                origin,      // ray origin
-                tMin,        // ray min range
-                L,           // ray direction
-                tMax,        // ray max range
-                0            // payload (location = 0)
-            ); 
-        }
-
-        vec3 specular = vec3(0);
-        attenuation = 1.0f / (lightDistance / pointLight.radius);
-
-        if(payload.isShadow) attenuation = 0.3;
-        else specular = computeSpecular(metalicRoughnessTex.r, gl_WorldRayDirectionEXT, L, normal) * attenuation;
-        
-        const vec3 diffuse = computeDiffuse(albedoTex, L, normal) * pointLight.color.rgb * attenuation;
-        //specular = computeSpecular((1 - metalicRoughnessTex.b), vec3(1,1,1),  gl_WorldRayDirectionEXT, L, normal) * pointLight.color.rgb * attenuation;
-        finalColor += vec4(diffuse, 1.0f) + vec4(specular, 1.0f);
-    }
-
-    payload.hitValue = finalColor;
+        lightOut += vec4(brdf, albedoTex.a) *
+                vec4(radiance, albedoTex.a) *
+                clamp(dot(L, normal), 0.0f, 1.0f);
+        // lightOut *= attenuation; TODO attenuation is 0
+    }   
+    payload.hitValue = lightOut + emmissionTex;
 }

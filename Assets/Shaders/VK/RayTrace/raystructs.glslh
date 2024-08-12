@@ -1,4 +1,7 @@
+const int SHADOW_BIT = 0;
+
 struct BasicPayload
 {
-  vec3 hitValue;
+  vec4 hitValue;
+  bool isShadow;
 };

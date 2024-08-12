@@ -59,6 +59,7 @@ TestGLTFRayTrace::TestGLTFRayTrace(Window& window) : VulkanTutorial(window) {
 
 	renderer = new VulkanRenderer(window, vkInit);
 	InitTutorialObjects();
+	InitPointLights(10);
 
 	FrameState const& state = renderer->GetFrameState();
 	vk::Device device = renderer->GetDevice();
@@ -82,8 +83,9 @@ TestGLTFRayTrace::TestGLTFRayTrace(Window& window) : VulkanTutorial(window) {
 
 	raygenShader	= UniqueVulkanRTShader(new VulkanRTShader("RayTrace/raygen.rgen.spv", device));
 	hitShader		= UniqueVulkanRTShader(new VulkanRTShader("RayTrace/closesthit.rchit.spv", device));
-	hitShader2		= UniqueVulkanRTShader(new VulkanRTShader("RayTrace/closesthit2.rchit.spv", device));
+	monteCarloCloseHitShader		= UniqueVulkanRTShader(new VulkanRTShader("RayTrace/MonteCarlo.rchit.spv", device));
 	missShader		= UniqueVulkanRTShader(new VulkanRTShader("RayTrace/miss.rmiss.spv", device));
+	shadowMissShader = UniqueVulkanRTShader(new VulkanRTShader("RayTrace/shadowMiss.rmiss.spv", device));
 
 	defaultTexture = LoadTexture("Doge.png");
 
@@ -123,18 +125,20 @@ TestGLTFRayTrace::TestGLTFRayTrace(Window& window) : VulkanTutorial(window) {
 	dSamplerDescriptor = CreateDescriptorSet(device, pool, *dSamplerLayout);
 
 	rtSceneBufferLayout = DescriptorSetLayoutBuilder(device)
-		.WithStorageBuffers(0, 1, vk::ShaderStageFlagBits::eClosestHitKHR) //Position
-		.WithStorageBuffers(1, 1, vk::ShaderStageFlagBits::eClosestHitKHR) //Index
-		.WithStorageBuffers(2, 1, vk::ShaderStageFlagBits::eClosestHitKHR) //Tex Corrd
-		.WithStorageBuffers(3, 1, vk::ShaderStageFlagBits::eClosestHitKHR) //Normal Corrd
-		.WithSampledImages(4, scene.textures.size(), vk::ShaderStageFlagBits::eClosestHitKHR) //Textre Array
-		.WithStorageBuffers(5, 1, vk::ShaderStageFlagBits::eClosestHitKHR) //Material Layer Buffer
-		.WithStorageBuffers(6, 1, vk::ShaderStageFlagBits::eClosestHitKHR) //SceneNode Buffer
+		.WithStorageBuffers(SCENE_DES_LAYOUT_BINDIND::POSITION, 1, vk::ShaderStageFlagBits::eClosestHitKHR) //Position
+		.WithStorageBuffers(SCENE_DES_LAYOUT_BINDIND::INDICES, 1, vk::ShaderStageFlagBits::eClosestHitKHR) //Index
+		.WithStorageBuffers(SCENE_DES_LAYOUT_BINDIND::TEX_COORD, 1, vk::ShaderStageFlagBits::eClosestHitKHR) //Tex Corrd
+		.WithStorageBuffers(SCENE_DES_LAYOUT_BINDIND::NORMAL, 1, vk::ShaderStageFlagBits::eClosestHitKHR) //Normal Corrd
+		.WithStorageBuffers(SCENE_DES_LAYOUT_BINDIND::TANGENT, 1, vk::ShaderStageFlagBits::eClosestHitKHR) //Tangent Corrd
+		.WithSampledImages(SCENE_DES_LAYOUT_BINDIND::MATERIAL, scene.textures.size(), vk::ShaderStageFlagBits::eClosestHitKHR) //Textre Array
+		.WithStorageBuffers(SCENE_DES_LAYOUT_BINDIND::MATERIAL_LAYER, 1, vk::ShaderStageFlagBits::eClosestHitKHR) //Material Layer Buffer
+		.WithStorageBuffers(SCENE_DES_LAYOUT_BINDIND::PRIMITIVE, 1, vk::ShaderStageFlagBits::eClosestHitKHR) //SceneNode Buffer
+		.WithUniformBuffers(SCENE_DES_LAYOUT_BINDIND::POINT_LIGHT,1, vk::ShaderStageFlagBits::eClosestHitKHR) //Array of point Light
 		.Build("Vertex Buffer Descriptor Set Layout  Build.");
 
 	BuildVertexBuffer(rtSceneBufferLayout, rtSceneBufferDescriptor, device, pool);
 	SceneDesBufferBuild(device, pool);
-
+	PointLightBufferBuild(rtSceneBufferLayout, rtSceneBufferDescriptor, device, pool);
 	Vector2i windowSize = hostWindow.GetScreenSize();
 
 
@@ -160,13 +164,15 @@ TestGLTFRayTrace::TestGLTFRayTrace(Window& window) : VulkanTutorial(window) {
 		.WithRecursionDepth(1)
 		.WithShader(*raygenShader, vk::ShaderStageFlagBits::eRaygenKHR)		//0
 		.WithShader(*missShader, vk::ShaderStageFlagBits::eMissKHR)			//1
-		.WithShader(*hitShader, vk::ShaderStageFlagBits::eClosestHitKHR)	//2
-		.WithShader(*hitShader2, vk::ShaderStageFlagBits::eClosestHitKHR)	//3
+		.WithShader(*shadowMissShader, vk::ShaderStageFlagBits::eMissKHR)   //2
+		.WithShader(*hitShader, vk::ShaderStageFlagBits::eClosestHitKHR)	//3
+		.WithShader(*monteCarloCloseHitShader, vk::ShaderStageFlagBits::eClosestHitKHR)	//4
 
 		.WithGeneralGroup(0)	//Group for the raygen shader	//Uses shader 0
 		.WithGeneralGroup(1)	//Group for the miss shader		//Uses shader 1
-		.WithTriangleHitGroup(2)								//Uses shader 2
-		.WithTriangleHitGroup(3)
+		.WithGeneralGroup(2)	//Group for the ShadowMiss shader		//Uses shader 1
+		.WithTriangleHitGroup(3)								//Uses shader 2
+		.WithTriangleHitGroup(4)
 
 		.WithDescriptorSetLayout(0, *rayTraceLayout)
 		.WithDescriptorSetLayout(1, *cameraLayout)
@@ -213,7 +219,7 @@ void NCL::Rendering::Vulkan::TestGLTFRayTrace::BuildTlas(const vk::Device& devic
 {   
 	for (const auto& mesh : scene.meshes) {
 		VulkanMesh* vkMesh = (VulkanMesh*)mesh.get();
-		bvhBuilder.WithObject(vkMesh, Matrix::Translation(Vector3{ 0,0,0 }) * Matrix::Scale(Vector3{ 1,1,1 }));
+		bvhBuilder.WithObject(vkMesh, Matrix::Translation(Vector3{ 0,0,0 }) * Matrix::Scale(Vector3{ 1,1,1 }), ~0, 1);
 	}
 
 	tlas = bvhBuilder
@@ -284,6 +290,18 @@ void TestGLTFRayTrace::RenderFrame(float dt) {
 	cmdBuffer.endRendering();
 }
 
+void NCL::Rendering::Vulkan::TestGLTFRayTrace::InitPointLights(const short& inCount)
+{
+	const Vector4 tempColorList[4] = {
+		Vector4(123 / 255.0f, 159 / 255.0f, 53 / 255.0f, 1.0f),
+		Vector4(67 / 255.0f, 47 / 255.0f, 117.0f / 255.0f, 1.0f),
+		Vector4(170 / 255.0f, 153 / 255.0f, 57.0f / 255.0f, 1.0f),
+		Vector4(136 / 255.0f, 45 / 255.0f, 97.0f / 255.0f, 1.0f)
+	};
+	for (short i = 1; i <= inCount; i++)
+		pointLightList.emplace_back(Light(Vector3(i * 15, i * 10, (i * 5) % 25), i * 15.0f, tempColorList[i % 4]));
+}
+
 void NCL::Rendering::Vulkan::TestGLTFRayTrace::SceneDesBufferBuild(vk::Device& device, vk::DescriptorPool& pool)
 {
 	sceneDesBuffer = BufferBuilder(device, renderer->GetMemoryAllocator())
@@ -294,7 +312,20 @@ void NCL::Rendering::Vulkan::TestGLTFRayTrace::SceneDesBufferBuild(vk::Device& d
 
 	sceneDesBuffer.CopyData(scene.primeInfoList.data(), sizeof(GLTFPrimInfo) * scene.primeInfoList.size());
 
-	WriteBufferDescriptor(device, *rtSceneBufferDescriptor, 6, vk::DescriptorType::eStorageBuffer, sceneDesBuffer);
+	WriteBufferDescriptor(device, *rtSceneBufferDescriptor, SCENE_DES_LAYOUT_BINDIND::PRIMITIVE, vk::DescriptorType::eStorageBuffer, sceneDesBuffer);
+}
+
+void NCL::Rendering::Vulkan::TestGLTFRayTrace::PointLightBufferBuild(vk::UniqueDescriptorSetLayout& inDesSetLayout, vk::UniqueDescriptorSet& outDesSet, vk::Device& device, vk::DescriptorPool& pool)
+{
+	pointLightBuffer = BufferBuilder(device, renderer->GetMemoryAllocator())
+		.WithBufferUsage(vk::BufferUsageFlagBits::eUniformBuffer)
+		.WithHostVisibility()
+		.WithPersistentMapping()
+		.Build(sizeof(Light) * pointLightList.size(), "PointLights");
+
+	pointLightBuffer.CopyData(pointLightList.data(), sizeof(Light) * pointLightList.size());
+
+	WriteBufferDescriptor(device, *outDesSet, SCENE_DES_LAYOUT_BINDIND::POINT_LIGHT, vk::DescriptorType::eUniformBuffer, pointLightBuffer);
 }
 
 void NCL::Rendering::Vulkan::TestGLTFRayTrace::BuildVertexBuffer(vk::UniqueDescriptorSetLayout& inDesSetLayout, vk::UniqueDescriptorSet& outDesSet, vk::Device& device, vk::DescriptorPool& pool)
@@ -303,6 +334,8 @@ void NCL::Rendering::Vulkan::TestGLTFRayTrace::BuildVertexBuffer(vk::UniqueDescr
 	std::vector<unsigned int> indexList;
 	std::vector<Vector2> texCoordDataList;
 	std::vector<Vector3> normalDataList;
+	std::vector<Vector4> vertexTangentList;
+
 	std::vector<vk::DescriptorImageInfo> tempImageInfoList(scene.textures.size());
 	std::vector<MaterialLayer> matLayerList;
 
@@ -313,6 +346,7 @@ void NCL::Rendering::Vulkan::TestGLTFRayTrace::BuildVertexBuffer(vk::UniqueDescr
 		indexList.insert(indexList.end(), vkMesh->GetIndexData().begin(), vkMesh->GetIndexData().end());
 		texCoordDataList.insert(texCoordDataList.end(), vkMesh->GetTextureCoordData().begin(), vkMesh->GetTextureCoordData().end());
 		normalDataList.insert(normalDataList.end(), vkMesh->GetNormalData().begin(), vkMesh->GetNormalData().end());
+		vertexTangentList.insert(vertexTangentList.end(), vkMesh->GetTangentData().begin(), vkMesh->GetTangentData().end());
 	}
 
 	outDesSet = CreateDescriptorSet(device, pool, *inDesSetLayout);
@@ -345,11 +379,18 @@ void NCL::Rendering::Vulkan::TestGLTFRayTrace::BuildVertexBuffer(vk::UniqueDescr
 		.Build(sizeof(Vector3) * normalDataList.size(), "Scene Vertex Normal Buffer");
 	vertexNormalBuffer.CopyData(normalDataList.data(), sizeof(Vector3) * normalDataList.size());
 
-	WriteBufferDescriptor(device, *outDesSet, 0, vk::DescriptorType::eStorageBuffer, vertexPositionBuffer);
-	WriteBufferDescriptor(device, *outDesSet, 1, vk::DescriptorType::eStorageBuffer, indicesBuffer);
-	WriteBufferDescriptor(device, *outDesSet, 2, vk::DescriptorType::eStorageBuffer, texCordBuffer);
-	WriteBufferDescriptor(device, *outDesSet, 3, vk::DescriptorType::eStorageBuffer, vertexNormalBuffer);
+	vertexTangentBuffer = BufferBuilder(device, renderer->GetMemoryAllocator())
+		.WithBufferUsage(vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eShaderDeviceAddressKHR)
+		.WithHostVisibility()
+		.WithPersistentMapping()
+		.Build(sizeof(Vector4) * vertexTangentList.size(), "Scene Vertex Tangent Buffer");
+	vertexTangentBuffer.CopyData(vertexTangentList.data(), sizeof(Vector4) * vertexTangentList.size());
 
+	WriteBufferDescriptor(device, *outDesSet, SCENE_DES_LAYOUT_BINDIND::POSITION, vk::DescriptorType::eStorageBuffer, vertexPositionBuffer);
+	WriteBufferDescriptor(device, *outDesSet, SCENE_DES_LAYOUT_BINDIND::INDICES, vk::DescriptorType::eStorageBuffer, indicesBuffer);
+	WriteBufferDescriptor(device, *outDesSet, SCENE_DES_LAYOUT_BINDIND::TEX_COORD, vk::DescriptorType::eStorageBuffer, texCordBuffer);
+	WriteBufferDescriptor(device, *outDesSet, SCENE_DES_LAYOUT_BINDIND::NORMAL, vk::DescriptorType::eStorageBuffer, vertexNormalBuffer);
+	WriteBufferDescriptor(device, *outDesSet, SCENE_DES_LAYOUT_BINDIND::TANGENT, vk::DescriptorType::eStorageBuffer, vertexTangentBuffer);
 
 	for (size_t i = 0; i < scene.textures.size(); i++)
 	{
@@ -361,7 +402,7 @@ void NCL::Rendering::Vulkan::TestGLTFRayTrace::BuildVertexBuffer(vk::UniqueDescr
 
 	vk::WriteDescriptorSet tempDesSet{
 		.dstSet = outDesSet.get(),
-		.dstBinding = 4,
+		.dstBinding = SCENE_DES_LAYOUT_BINDIND::MATERIAL,
 		.dstArrayElement = 0,
 		.descriptorCount = static_cast<uint32_t>(scene.textures.size()),
 		.descriptorType = vk::DescriptorType::eSampledImage
@@ -378,5 +419,5 @@ void NCL::Rendering::Vulkan::TestGLTFRayTrace::BuildVertexBuffer(vk::UniqueDescr
 		.WithPersistentMapping()
 		.Build(sizeof(MaterialLayer) * matLayerList.size(), "Material Buffer");
 	matLayerBuffer.CopyData(matLayerList.data(), sizeof(MaterialLayer) * matLayerList.size());
-	WriteBufferDescriptor(device, *outDesSet, 5, vk::DescriptorType::eStorageBuffer, matLayerBuffer);
+	WriteBufferDescriptor(device, *outDesSet, SCENE_DES_LAYOUT_BINDIND::MATERIAL_LAYER, vk::DescriptorType::eStorageBuffer, matLayerBuffer);
 }

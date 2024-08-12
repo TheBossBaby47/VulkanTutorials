@@ -42,9 +42,6 @@ void main() {
   
   vec4 direction = invViewMatrix * vec4(normalize(target.xyz), 0);
 
-  //origin    = vec4(0,0,0,1);
-  //direction = vec4(0,0,-1,1);
-
   uint  rayFlags = gl_RayFlagsOpaqueEXT;
   float tMin     = 0.001;
   float tMax     = 10000.0;
@@ -62,7 +59,5 @@ void main() {
               0                 // payload (location = 0)
   );
 
-  //imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(payload.hitValue, 1.0));
-
-    imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(payload.hitValue,1.0));
+  imageStore(image, ivec2(gl_LaunchIDEXT.xy), payload.hitValue);
 }

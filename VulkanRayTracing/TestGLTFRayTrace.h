@@ -51,6 +51,20 @@ namespace NCL::Rendering::Vulkan {
 		}
 	};
 
+	enum SCENE_DES_LAYOUT_BINDIND
+	{
+		POSITION = 0,
+		INDICES,
+		TEX_COORD,
+		NORMAL,
+		TANGENT,
+		MATERIAL,
+		MATERIAL_LAYER,
+		PRIMITIVE,
+		POINT_LIGHT,
+		MAXBINDING
+	};
+
 	class TestGLTFRayTrace : public VulkanTutorial	{
 	public:
 		TestGLTFRayTrace(Window& window);
@@ -59,7 +73,7 @@ namespace NCL::Rendering::Vulkan {
 	protected:
 		void BuildTlas(const vk::Device& device);
 		void RenderFrame(float dt) override;
-
+		void InitPointLights(const short& inCount = 10);
 		GLTFScene scene;
 
 		VulkanPipeline		displayPipeline;
@@ -91,6 +105,7 @@ namespace NCL::Rendering::Vulkan {
 		UniqueVulkanRTShader	raygenShader;
 		UniqueVulkanRTShader	hitShader;
 		UniqueVulkanRTShader	missShader;
+		UniqueVulkanRTShader	shadowMissShader;
 		vk::PhysicalDeviceRayTracingPipelinePropertiesKHR	rayPipelineProperties;
 		vk::PhysicalDeviceAccelerationStructureFeaturesKHR	rayAccelFeatures;
 
@@ -102,13 +117,14 @@ namespace NCL::Rendering::Vulkan {
 		vk::UniqueDescriptorSetLayout	dSamplerLayout;
 		vk::UniqueDescriptorSet		  dSamplerDescriptor;
 
-		UniqueVulkanRTShader	hitShader2;
+		UniqueVulkanRTShader	monteCarloCloseHitShader;
 
 		vk::UniqueDescriptorSetLayout rtSceneBufferLayout;
 		vk::UniqueDescriptorSet			rtSceneBufferDescriptor;
 		VulkanBuffer	texCordBuffer;
 		VulkanBuffer	vertexPositionBuffer;
 		VulkanBuffer	vertexNormalBuffer;
+		VulkanBuffer	vertexTangentBuffer;
 		VulkanBuffer	indicesBuffer;
 		/// <summary>
 		/// Buffer to store texturemap and material layer map in a big array
@@ -122,6 +138,9 @@ namespace NCL::Rendering::Vulkan {
 		VulkanBuffer	sceneDesBuffer;
 
 		void SceneDesBufferBuild(vk::Device& device, vk::DescriptorPool& pool);
+		std::vector<Light> pointLightList;
+		void PointLightBufferBuild(vk::UniqueDescriptorSetLayout& inDesSetLayout, vk::UniqueDescriptorSet& outDesSet, vk::Device& device, vk::DescriptorPool& pool);
+		VulkanBuffer pointLightBuffer;
 		//--------------------------------------------------------------------------------------------------
 	};
 }
