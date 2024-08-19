@@ -16,5 +16,6 @@ License: MIT (see LICENSE file at the top of the source tree)
 layout(location = 0) rayPayloadInEXT BasicPayload payload;
 
 void main() {
-	payload.hitValue = vec3(1,0,1);
+	payload.hitValue = vec4(1,0,1,1);
+	payload.bounces -= 1;
 }

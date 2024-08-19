@@ -1,8 +1,9 @@
 const float PI = 3.14159265359f;
 
-vec4 LambartianDiffuse(vec4 inAlbedo)
+vec4 LambartianDiffuse(vec4 inAlbedo, vec3 inL, vec3 inN)
 {
-    return inAlbedo / PI;
+    const float lDotV = max(dot(inL,inN), 0.0f);
+    return (inAlbedo / PI) * lDotV;
 }
 
 //Specular NDF
@@ -10,7 +11,7 @@ float GGXSpecular(float inRoughness, vec3 inN, vec3 inH)
 {
     const float alpha = inRoughness * inRoughness;
     const float alpha2 = pow(alpha, 2);
-    const float nDotH2 = pow(clamp(dot(inN, inH), 0.0f, 1.0f), 2);
+    const float nDotH2 = pow(max(dot(inN, inH), 0.0f), 2);
 
     const float numerator = alpha2;
     const float denominator = PI * pow(((nDotH2) * (alpha2 - 1.0f) + 1), 2);
@@ -38,29 +39,29 @@ float GeometricAttenuation(float inRoughness, vec3 inL, vec3 inV, vec3 inN)
 
 vec3 SchlickFresnel(vec3 inV, vec3 inH, vec3 inAlbedo, float inMetallic)
 {
-    const float vDotH = clamp(dot(inV,inH), 0.0f, 1.0f);
+    const float vDotH = max(dot(inV,inH), 0.0f);
     const vec3 f0 = mix(vec3(0.04, 0.04, 0.04), inAlbedo, inMetallic);
 
     return f0 + ((1 - f0) * pow(clamp(1.0f - vDotH, 0.0f, 1.0f), 5.0f));
 }
 
-vec3 MicrofacetSpecularBrdf(const float inMetallic, const float inRoughness, const vec3 inAlbedo,  const vec3 inN, const vec3 inL, const vec3 inV)
+vec3 MicrofacetSpecularBrdf(const float inMetallic, const float inRoughness, const vec3 inAlbedo,  const vec3 inN, const vec3 inL, const vec3 inV, out vec3 specularComponent)
 {
     const vec3 H = normalize(inV + inL);
     const float D = GGXSpecular(inRoughness, inN, H);
     const vec3 F = SchlickFresnel(inV, H, inAlbedo, inMetallic);
     const float G = GeometricAttenuation(inRoughness, inL, inV, inN);
 
-    const float nDotL = clamp(dot(inN, inL), 0.001f, 1.0f);
-    const float nDotV = clamp(dot(inN, inV), 0.001f, 1.0f);
+    const float nDotL = max(dot(inN, inL), 0.0f);
+    const float nDotV = max(dot(inN, inV), 0.0f);
 
     const vec3 numerator = D * F * G;
-    const float denominator = 4 * nDotL * nDotV;
+    const float denominator = 4.0f * nDotL * nDotV + 0.001f; //Added 0.0001 to mitigate divide by 0
     vec3 specularBrdf = numerator / denominator;
-
+    specularComponent = specularBrdf;
     const vec3 kS = F;
     const vec3 kD = vec3(1.0f) - kS;
-    const vec3 diffuseBrdf = LambartianDiffuse(vec4(inAlbedo, 1.0f)).rgb;
+    const vec3 diffuseBrdf = LambartianDiffuse(vec4(inAlbedo, 1.0f), inL, inN).rgb;
     return (kD * diffuseBrdf)  +  specularBrdf;
 }
 
@@ -78,7 +79,7 @@ float PointLightAttenuation(const float inDistance, const float inLightRadius)
     //desired.    
     const float denominator = (inDistance * inDistance) + 1.0f;
 
-    return numerator / denominator;
+    return 1.0f / denominator;
 }
 
 vec4 Reinhard(const vec4 inV)
@@ -105,4 +106,80 @@ vec3 GetNormalFromTexture(vec3 inTexNormal, vec3 inVNormal, vec4 inVTangent)
                     
     outNormal = normalize(TBN * bumpNormal);
     return outNormal;
+}
+
+// inRoughness = Roughness parameter of surface
+// inN = Normal vector of the surface
+// inH = Half angle of light and camera(view) vector
+// inI = vector if incoming light to surface
+vec3 ReflectedRay(float inRoughness, vec3 inN, vec3 inH, vec3 inI)
+{
+    vec3 rayReflected = 2.0f * (max(dot(inN, inH), 0.0f)) * inH  - inI;
+    return rayReflected;
+}
+
+vec3 ReflectedRay2(float inRoughness, vec3 inN, vec3 inH, vec3 inI)
+{
+    const float D = GGXSpecular(inRoughness, inN, inH);
+    vec3 rayReflected = reflect(-inI, inN);  // https://registry.khronos.org/OpenGL-Refpages/gl4/html/reflect.xhtml
+    return rayReflected * D;
+}
+
+//https://computergraphics.stackexchange.com/questions/10622/path-tracing-how-to-ensure-we-are-sampling-a-direction-vector-within-the-visibl
+vec3 RandomReflection(vec3 normal, vec2 randomValues, float maxTheta) {
+    // pick an orthogonal tangent vector using the method described here: http://lolengine.net/blog/2013/09/21/picking-orthogonal-vector-combing-coconuts
+    vec3 tangent = (normal.x > normal.z) ? vec3(-normal.y, normal.x, 0.0) : vec3(0.0, -normal.z, normal.y);
+    // and a bitangent vector orthogonal to both
+    vec3 bitangent = cross(normal, tangent);
+
+    float phi = 2.0 * PI * randomValues.x;
+    float theta = randomValues.y * maxTheta;
+    float sinTheta = sin(theta);
+    return tangent * cos(phi) * sinTheta + bitangent * sin(phi) * sinTheta + normal * cos(theta);
+}
+
+vec4 IndirectCalculation(vec4 inIncomingRad, const float inMetallic, const float inRoughness, const vec3 inAlbedo,  const vec3 inN, const vec3 inL, const vec3 inV)
+{
+    const vec3 H = normalize(inV + inL);
+    const float D = GGXSpecular(inRoughness, inN, H);
+    const vec3 F = SchlickFresnel(inV, H, inAlbedo, inMetallic);
+    const float G = GeometricAttenuation(inRoughness, inL, inV, inN);
+
+    const float nDotL = max(dot(inN, inL), 0.0f);
+    const float nDotV = max(dot(inN, inV), 0.0f);
+
+    const vec3 numerator = D * F * G;
+    const float denominator = 4.0f * nDotL * nDotV + 0.001f; //Added 0.0001 to mitigate divide by 0
+    vec3 specularBrdf = numerator / denominator;
+
+    return inIncomingRad * vec4(specularBrdf, 1.0f);
+}
+
+float sqr(float x)
+{
+    return x * x;
+}
+
+float attenuate_cusp(float distance, float radius,
+    float max_intensity, float falloff)
+{
+    float s = distance / radius;
+
+    if (s >= 1.0)
+        return 0.0;
+
+    float s2 = sqr(s);
+
+    return max_intensity * sqr(1 - s2) / (1 + falloff * s);
+}
+
+vec4 DirectionalLightPbr(vec3 inDirection, vec3 inWorldPos, vec4 inColor, vec3 inNormal, float inRoughness, float inMetallic, vec4 inAlbedo, vec3 inV)
+{
+    //Calculate light radiance
+    vec3 L = normalize(-inDirection); //direction vector from sun to world
+    vec3 halfVector = normalize(L + inV);
+    vec3 specular = vec3(0);
+    vec4 radiance = inColor * 3.0f;
+    vec3 brdf = MicrofacetSpecularBrdf(inMetallic, inRoughness, inAlbedo.rgb,  inNormal, L, inV, specular);
+    return vec4(brdf, inAlbedo.a) * radiance  * max(dot(L, inNormal), 0.0f);     
 }

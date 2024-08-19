@@ -4,4 +4,7 @@ struct BasicPayload
 {
   vec4 hitValue;
   bool isShadow;
+  vec4 weight;
+  int bounces;
+  vec3 previousPosition;
 };

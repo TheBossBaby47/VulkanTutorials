@@ -298,9 +298,17 @@ void NCL::Rendering::Vulkan::TestGLTFRayTrace::InitPointLights(const short& inCo
 		Vector4(170 / 255.0f, 153 / 255.0f, 57.0f / 255.0f, 1.0f),
 		Vector4(136 / 255.0f, 45 / 255.0f, 97.0f / 255.0f, 1.0f)
 	};
-	for (short i = 1; i <= inCount; i++)
-		pointLightList.emplace_back(Light(Vector3(i * 15, i * 10, (i * 5) % 25), i * 15.0f, tempColorList[i % 4]));
-}
+	pointLightList.emplace_back(Light(Vector3(0, 10, -20), 1000, tempColorList[0]));  // Entrance light
+	pointLightList.emplace_back(Light(Vector3(0, 20, 0), 20, tempColorList[1]));    // Hanging light
+	pointLightList.emplace_back(Light(Vector3(-20, 5, -20), 10, tempColorList[2])); // Corner light 1
+	pointLightList.emplace_back(Light(Vector3(20, 5, -20), 20, tempColorList[3]));  // Corner light 2
+	pointLightList.emplace_back(Light(Vector3(-20, 5, 20), 10, tempColorList[0]));  // Corner light 3
+	pointLightList.emplace_back(Light(Vector3(20, 5, 20), 10, tempColorList[1]));   // Corner light 4
+	pointLightList.emplace_back(Light(Vector3(10, 5, 0), 25, tempColorList[2]));    // Wall-mounted sconce 1
+	pointLightList.emplace_back(Light(Vector3(-10, 5, 0), 5, tempColorList[3]));   // Wall-mounted sconce 2
+	pointLightList.emplace_back(Light(Vector3(0, 15, -10), 5, tempColorList[0]));  // Mid-room hanging light 1
+	pointLightList.emplace_back(Light(Vector3(0, 15, 10), 35, tempColorList[1]));   // Mid-room hanging light 2
+ }
 
 void NCL::Rendering::Vulkan::TestGLTFRayTrace::SceneDesBufferBuild(vk::Device& device, vk::DescriptorPool& pool)
 {
@@ -348,6 +356,8 @@ void NCL::Rendering::Vulkan::TestGLTFRayTrace::BuildVertexBuffer(vk::UniqueDescr
 		normalDataList.insert(normalDataList.end(), vkMesh->GetNormalData().begin(), vkMesh->GetNormalData().end());
 		vertexTangentList.insert(vertexTangentList.end(), vkMesh->GetTangentData().begin(), vkMesh->GetTangentData().end());
 	}
+
+
 
 	outDesSet = CreateDescriptorSet(device, pool, *inDesSetLayout);
 
