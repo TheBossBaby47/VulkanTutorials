@@ -106,6 +106,7 @@ namespace NCL::Rendering::Vulkan {
 		UniqueVulkanRTShader	hitShader;
 		UniqueVulkanRTShader	missShader;
 		UniqueVulkanRTShader	shadowMissShader;
+		UniqueVulkanRTShader	secondaryRayMissShader;
 		vk::PhysicalDeviceRayTracingPipelinePropertiesKHR	rayPipelineProperties;
 		vk::PhysicalDeviceAccelerationStructureFeaturesKHR	rayAccelFeatures;
 

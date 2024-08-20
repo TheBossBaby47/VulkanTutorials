@@ -42,7 +42,7 @@ vec3 SchlickFresnel(vec3 inV, vec3 inH, vec3 inAlbedo, float inMetallic)
     const float vDotH = max(dot(inV,inH), 0.0f);
     const vec3 f0 = mix(vec3(0.04, 0.04, 0.04), inAlbedo, inMetallic);
 
-    return f0 + ((1 - f0) * pow(clamp(1.0f - vDotH, 0.0f, 1.0f), 5.0f));
+    return f0 + ((1 - f0) * pow(1.0f - vDotH, 5.0f));
 }
 
 vec3 MicrofacetSpecularBrdf(const float inMetallic, const float inRoughness, const vec3 inAlbedo,  const vec3 inN, const vec3 inL, const vec3 inV, out vec3 specularComponent)

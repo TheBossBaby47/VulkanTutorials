@@ -133,6 +133,7 @@ void main()
     const vec4 emmissionTex = pow(texture(sampler2D(textureMap[material.emissionId], mySampler), texCoord), vec4(2.2f));
     const float roughness = metalicRoughnessTex.g;
     const float metal = metalicRoughnessTex.b;
+    const vec3 V = normalize(gl_WorldRayDirectionEXT);
 
     vec4 lightDirect = vec4(0.0f, 0.0f, 0.0f, 0.0f);
     vec4 lightIndirect = vec4(0.0f);
@@ -142,49 +143,51 @@ void main()
     const uint  refRayFlag = gl_RayFlagsOpaqueEXT;
     const float tMin     = 0.001;
     const float tMax     = 10000.0;
-    vec3 refRay = vec3(0);
 
+    vec3 refRay = vec3(0);
     //Calculate Direct Light
     for(int i = 0; i < pointLights.pointLightList.length(); i++)
     {
         pointLight.position = pointLights.pointLightList[i].position;
         pointLight.color = pointLights.pointLightList[i].color;
         pointLight.radius = pointLights.pointLightList[i].radius;
-
-        const vec3 L = normalize(pointLight.position - world_position);
-        const vec3 V = normalize(gl_WorldRayDirectionEXT);
-        const float lightDistance = length(pointLight.position - world_position);
-        const vec3 brdf = MicrofacetSpecularBrdf(metal, roughness, albedoTex.rgb,  normal, L, V, specular);
-        attenuation =  attenuate_cusp(lightDistance, pointLight.radius, 2.0f , 1);
-        const vec3 radiance = pointLight.color.rgb;
         
-        lightDirect += vec4(brdf, albedoTex.a) *
-                vec4(radiance, albedoTex.a) *
-                max(dot(L, normal), 0.0f) * attenuation;
-        //Global Light or Indirect Light calculation        
-        // refRay = normalize(vec3(ReflectedRay2(roughness, normal, normalize(L + V), L)));
-        // refRay = reflect(-V, normal);
-        // if(payload.bounces > 0)
-        // {
-        //     payload.previousPosition = world_position;
-        //     payload.bounces = max(payload.bounces - 1, 0);
+        vec3 L = pointLight.position - world_position;
+        const float lightDistance = length(L);
+        L = normalize(L);
 
-        //     traceRayEXT(
-        //         tlas,             // acceleration structure
-        //         refRayFlag,       // rayFlags
-        //         0xFF,             // cullMask
-        //         0,                // sbtRecordOffset
-        //         0,                // sbtRecordStride
-        //         1,                // missIndex
-        //         world_position + (0.001 * normal),       // ray origin
-        //         tMin,             // ray min range
-        //         refRay,    // ray direction
-        //         tMax,             // ray max range
-        //         0                 // payload (location = 0)
-        //     );
-        //     lightIndirect += IndirectCalculation(payload.hitValue, metal, roughness, albedoTex.rgb,  normal, normalize(world_position - payload.previousPosition), normalize(world_position - payload.previousPosition));
-        // }
+        //Shadow Calculation
+        traceRayEXT(
+            tlas,             // acceleration structure
+            gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT ,       // rayFlags
+            0xFF,             // cullMask
+            0,                // sbtRecordOffset
+            0,                // sbtRecordStride
+            1,                // missIndex
+            world_position + (0.1 * normal),       // ray origin
+            tMin,             // ray min range
+            L,    // ray direction
+            lightDistance,             // ray max range
+            0                 // payload (location = 0)
+        );
+
+        if(!payload.isShadow) 
+        {
+            const vec3 brdf = MicrofacetSpecularBrdf(metal, roughness, albedoTex.rgb,  normal, L, V, specular);
+            attenuation =  attenuate_cusp(lightDistance, pointLight.radius, 2.0f , 1);
+            const vec3 radiance = pointLight.color.rgb;
+            
+            lightDirect += vec4(brdf, albedoTex.a) *
+                    vec4(radiance, albedoTex.a) *
+                    max(dot(L, normal), 0.0f) * attenuation;
+            payload.isShadow = true;        
+        }
+        else lightDirect *= 0.3;
     }
+
+    //Directional Light
+    const vec3 globalLightDirection = normalize(vec3(-0.5f, -1.0f, -0.3f));
+    lightDirect += DirectionalLightPbr(globalLightDirection, world_position, vec4(255/255.0f, 100/255.0f, 70/255.0f, 1), normal, roughness, metal, albedoTex, normalize(gl_WorldRayDirectionEXT));
 
     if(payload.bounces > 0)
     {
@@ -199,33 +202,27 @@ void main()
             pointLight.color = pointLights.pointLightList[i].color;
             const vec3 L = normalize(pointLight.position - world_position);
             const vec3 V = normalize(gl_WorldRayDirectionEXT);
-            refRay = normalize(vec3(ReflectedRay2(roughness, normal, normalize(L + V), L)));
+            refRay = reflect(-V, normal);
 
-            //refRay = reflect(-V, normal);
-
-            payload.bounces = max(payload.bounces - 1, 0);
             traceRayEXT(
                 tlas,             // acceleration structure
                 refRayFlag,       // rayFlags
                 0xFF,             // cullMask
-                0,                // sbtRecordOffset
+                1,                // sbtRecordOffset
                 0,                // sbtRecordStride
-                1,                // missIndex
-                world_position + (0.001 * normal),       // ray origin
+                2,                // missIndex
+                world_position + (0.1 * normal),       // ray origin
                 tMin,             // ray min range
-                refRay,    // ray direction
+                refRay,           // ray direction
                 tMax,             // ray max range
                 0                 // payload (location = 0)
                 );
-            lightIndirect += IndirectCalculation(payload.hitValue, metal, roughness, albedoTex.rgb,  normal, refRay, world_position);
-            //lightIndirect += IndirectCalculation(payload.hitValue, metal, roughness, albedoTex.rgb,  normal, normalize(world_position - payload.previousPosition), normalize( - payload.previousPosition));
+            //lightIndirect += IndirectCalculation(payload.hitValue, metal, roughness, albedoTex.rgb,  normal, refRay, world_position);
+            lightIndirect += IndirectCalculation(payload.hitValue, metal, roughness, albedoTex.rgb,  normal, normalize(world_position - payload.previousPosition), normalize( - payload.previousPosition));
             payload.previousPosition = world_position;
         }
-
     }
 
-    //Directional Light
-    lightDirect += DirectionalLightPbr(vec3(1,1,-1), world_position, vec4(255/255.0f, 100/255.0f, 70/255.0f, 1), normal, roughness, metal, albedoTex, normalize(gl_WorldRayDirectionEXT));
     vec4 mapped = Reinhard(lightDirect + lightIndirect + emmissionTex);
     // gamma correction 
     mapped = pow(mapped, vec4(1.0 / 2.2f));

@@ -10,5 +10,5 @@ layout(location = 0) rayPayloadInEXT BasicPayload payload;
 
 void main() 
 {
-    payload.isShadow = false;
+    payload.bounces -= 1;
 }

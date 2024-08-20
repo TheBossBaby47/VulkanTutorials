@@ -86,6 +86,7 @@ TestGLTFRayTrace::TestGLTFRayTrace(Window& window) : VulkanTutorial(window) {
 	monteCarloCloseHitShader		= UniqueVulkanRTShader(new VulkanRTShader("RayTrace/MonteCarlo.rchit.spv", device));
 	missShader		= UniqueVulkanRTShader(new VulkanRTShader("RayTrace/miss.rmiss.spv", device));
 	shadowMissShader = UniqueVulkanRTShader(new VulkanRTShader("RayTrace/shadowMiss.rmiss.spv", device));
+	secondaryRayMissShader = UniqueVulkanRTShader(new VulkanRTShader("RayTrace/SecondRayMiss.rmiss.spv", device));
 
 	defaultTexture = LoadTexture("Doge.png");
 
@@ -165,8 +166,9 @@ TestGLTFRayTrace::TestGLTFRayTrace(Window& window) : VulkanTutorial(window) {
 		.WithShader(*raygenShader, vk::ShaderStageFlagBits::eRaygenKHR)		//0
 		.WithShader(*missShader, vk::ShaderStageFlagBits::eMissKHR)			//1
 		.WithShader(*shadowMissShader, vk::ShaderStageFlagBits::eMissKHR)   //2
-		.WithShader(*hitShader, vk::ShaderStageFlagBits::eClosestHitKHR)	//3
+		.WithShader(*secondaryRayMissShader, vk::ShaderStageFlagBits::eMissKHR)   //3
 		.WithShader(*monteCarloCloseHitShader, vk::ShaderStageFlagBits::eClosestHitKHR)	//4
+		.WithShader(*hitShader, vk::ShaderStageFlagBits::eClosestHitKHR)	//5
 
 		.WithGeneralGroup(0)	//Group for the raygen shader	//Uses shader 0
 		.WithGeneralGroup(1)	//Group for the miss shader		//Uses shader 1

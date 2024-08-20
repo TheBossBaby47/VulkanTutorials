@@ -46,8 +46,9 @@ void main() {
   float tMin     = 0.001;
   float tMax     = 10000.0;
   payload.hitValue = vec4(0.0f);
-  payload.bounces = 1;
+  payload.bounces = 5;
   payload.previousPosition = vec3(0.0f);
+
   traceRayEXT(tlas,             // acceleration structure
               rayFlags,         // rayFlags
               0xFF,             // cullMask

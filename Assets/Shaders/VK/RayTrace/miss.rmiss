@@ -17,5 +17,5 @@ layout(location = 0) rayPayloadInEXT BasicPayload payload;
 
 void main() {
 	payload.hitValue = vec4(1,0,1,1);
-	payload.bounces -= 1;
+    payload.bounces -= 1;
 }
